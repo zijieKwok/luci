@@ -1,10 +1,11 @@
 local api = require "luci.passwall.api"
-local appname = api.appname
+local appname = "passwall"
 local uci = api.uci
-local has_v2ray = api.is_finded("v2ray")
-local has_xray = api.is_finded("xray")
+local has_singbox = api.finded_com("singbox")
+local has_xray = api.finded_com("xray")
 
 m = Map(appname)
+api.set_apply_on_parse(m)
 
 local nodes_table = {}
 for k, e in ipairs(api.get_valid_nodes()) do
@@ -41,6 +42,9 @@ if auto_switch_tip then
 	socks_node.description = auto_switch_tip
 end
 
+o = s:option(Flag, "bind_local", translate("Bind Local"), translate("When selected, it can only be accessed localhost."))
+o.default = "0"
+
 local n = 1
 uci:foreach(appname, "socks", function(s)
 	if s[".name"] == section then
@@ -54,31 +58,35 @@ o.default = n + 1080
 o.datatype = "port"
 o.rmempty = false
 
-if has_v2ray or has_xray then
+if has_singbox or has_xray then
 	o = s:option(Value, "http_port", "HTTP " .. translate("Listen Port") .. " " .. translate("0 is not use"))
 	o.default = 0
 	o.datatype = "port"
 end
 
+o = s:option(Flag, "log", translate("Enable") .. " " .. translate("Log"))
+o.default = 1
+o.rmempty = false
+
 o = s:option(Flag, "enable_autoswitch", translate("Auto Switch"))
 o.default = 0
 o.rmempty = false
 
-o = s:option(Value, "autoswitch_testing_time", translate("How often to test"), translate("Units:minutes"))
-o.datatype = "uinteger"
-o.default = 1
+o = s:option(Value, "autoswitch_testing_time", translate("How often to test"), translate("Units:seconds"))
+o.datatype = "min(10)"
+o.default = 30
 o:depends("enable_autoswitch", true)
 
 o = s:option(Value, "autoswitch_connect_timeout", translate("Timeout seconds"), translate("Units:seconds"))
-o.datatype = "uinteger"
+o.datatype = "min(1)"
 o.default = 3
 o:depends("enable_autoswitch", true)
 
 o = s:option(Value, "autoswitch_retry_num", translate("Timeout retry num"))
-o.datatype = "uinteger"
+o.datatype = "min(1)"
 o.default = 1
 o:depends("enable_autoswitch", true)
-
+	
 autoswitch_backup_node = s:option(DynamicList, "autoswitch_backup_node", translate("List of backup nodes"))
 autoswitch_backup_node:depends("enable_autoswitch", true)
 function o.write(self, section, value)
@@ -108,10 +116,8 @@ o.default = "https://www.google.com/generate_204"
 o:depends("enable_autoswitch", true)
 
 for k, v in pairs(nodes_table) do
-	if v.node_type == "normal" then
-		autoswitch_backup_node:value(v.id, v["remark"])
-		socks_node:value(v.id, v["remark"])
-	end
+	autoswitch_backup_node:value(v.id, v["remark"])
+	socks_node:value(v.id, v["remark"])
 end
 
 m:append(Template(appname .. "/socks_auto_switch/footer"))
